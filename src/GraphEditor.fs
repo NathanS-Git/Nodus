@@ -17,7 +17,6 @@ let gateLabel gateType =
     | And -> "AND"
     | Or -> "OR"
     | Nand -> "NAND"
-    | Button -> "BTN"
     | Input -> "IN"
     | Output -> "OUT"
     | Custom def -> def.Name
@@ -38,13 +37,13 @@ let isCustom gateType =
 let inputCount gateType =
     match gateType with
     | And | Or | Nand -> 100
-    | Button | Input -> 0
+    | Input -> 0
     | Output -> 100
     | Custom def -> List.length def.Inputs
 
 let outputCount gateType =
     match gateType with
-    | And | Or | Nand | Button | Output -> 1
+    | And | Or | Nand | Output -> 1
     | Input -> 100
     | Custom def -> List.length def.Outputs
 
@@ -153,7 +152,6 @@ let addGate gateType x y (state: GraphState) =
 let addAnd x y state = addGate And x y state
 let addOr x y state = addGate Or x y state
 let addNand x y state = addGate Nand x y state
-let addButton x y state = addGate Button x y state
 let addInput x y state = addGate Input x y state
 let addOutput x y state = addGate Output x y state
 
@@ -293,7 +291,6 @@ and simulateWithForced (forcedOutputs: Map<NodeId, bool array>) (state: GraphSta
         | Some outs -> outs
         | None ->
             match n.GateType with
-            | Button -> n.Outputs
             | Input -> n.Outputs
             | Output ->
                 let ins = inputsFor nodes n.Id
@@ -365,9 +362,9 @@ let addEdge source target (state: GraphState) =
         | Some sp, Some tp -> addEdgeWithPorts source sp target tp state
         | _ -> state
 
-let toggleButton nodeId (state: GraphState) =
+let toggleInput nodeId (state: GraphState) =
     match Map.tryFind nodeId state.Nodes with
-    | Some n when n.GateType = Button ->
+    | Some n when n.GateType = Input ->
         let value = not (n.Outputs.Length > 0 && n.Outputs.[0])
         let newOutputs = Array.create n.OutputCount value
         let nodes = Map.add nodeId { n with Outputs = newOutputs } state.Nodes
@@ -742,9 +739,8 @@ let drawNode (ctx: CanvasRenderingContext2D) (state: GraphState) (n: Node) =
 
     let fillColor, strokeColor =
         match n.GateType with
-        | Button -> (if outputHigh then "#86efac" else "#e5e7eb"), "#374151"
-        | Input -> "#3b82f6", "#1d4ed8"
-        | Output -> "#f97316", "#c2410c"
+        | Input -> (if outputHigh then "#86efac" else "#e5e7eb"), "#1d4ed8"
+        | Output -> (if outputHigh then "#f97316" else "#e5e7eb"), (if outputHigh then "#c2410c" else "#9ca3af")
         | _ -> "#ffffff", "#374151"
     ctx.fillStyle <- color fillColor
     ctx.fill ()
@@ -974,7 +970,6 @@ let handleMouseDown (x: float) (y: float) (shift: bool) (ctrl: bool) (state: Gra
     | AddAnd -> addAnd x y state
     | AddOr -> addOr x y state
     | AddNand -> addNand x y state
-    | AddButton -> addButton x y state
     | AddInput -> addInput x y state
     | AddOutput -> addOutput x y state
     | AddCustom def -> addGate (Custom def) x y state
@@ -1057,7 +1052,7 @@ let handleMouseUp (x: float) (y: float) (state: GraphState) =
         let state = { state with Drag = NoDrag }
         if moved < clickThreshold then
             match Map.tryFind id state.Nodes with
-            | Some n when n.GateType = Button -> toggleButton id state
+            | Some n when n.GateType = Input -> toggleInput id state
             | _ -> state
         else
             state

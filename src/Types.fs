@@ -16,7 +16,6 @@ and GateType =
     | And
     | Or
     | Nand
-    | Button
     | Input
     | Output
     | Custom of CustomGateDef
@@ -51,7 +50,6 @@ type ToolMode =
     | AddAnd
     | AddOr
     | AddNand
-    | AddButton
     | AddInput
     | AddOutput
     | AddCustom of CustomGateDef

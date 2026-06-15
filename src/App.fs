@@ -152,7 +152,6 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
     let addAndBtn = createButton "AND" (state.Mode = AddAnd) (fun () -> state <- setMode AddAnd state; refresh ())
     let addOrBtn = createButton "OR" (state.Mode = AddOr) (fun () -> state <- setMode AddOr state; refresh ())
     let addNandBtn = createButton "NAND" (state.Mode = AddNand) (fun () -> state <- setMode AddNand state; refresh ())
-    let addButtonBtn = createButton "Button" (state.Mode = AddButton) (fun () -> state <- setMode AddButton state; refresh ())
     let addInputBtn = createButton "Input" (state.Mode = AddInput) (fun () -> state <- setMode AddInput state; refresh ())
     let addOutputBtn = createButton "Output" (state.Mode = AddOutput) (fun () -> state <- setMode AddOutput state; refresh ())
     let addEdgeBtn = createButton "Wire" (state.Mode = AddEdge) (fun () -> state <- setMode AddEdge state; refresh ())
@@ -160,7 +159,6 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
     toolbar.appendChild addAndBtn |> ignore
     toolbar.appendChild addOrBtn |> ignore
     toolbar.appendChild addNandBtn |> ignore
-    toolbar.appendChild addButtonBtn |> ignore
     toolbar.appendChild addInputBtn |> ignore
     toolbar.appendChild addOutputBtn |> ignore
     toolbar.appendChild addEdgeBtn |> ignore
@@ -247,7 +245,6 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
         | AddAnd -> "Click on the canvas to add AND gates."
         | AddOr -> "Click on the canvas to add OR gates."
         | AddNand -> "Click on the canvas to add NAND gates."
-        | AddButton -> "Click on the canvas to add Buttons."
         | AddInput -> "Click to add Input ports (blue) for custom gates."
         | AddOutput -> "Click to add Output ports (orange) for custom gates."
         | AddEdge -> "Drag from a gate/button output to a gate input."
@@ -326,7 +323,7 @@ let init () =
     let rec loop (_: float) =
         let cursor =
             match state.Mode with
-            | AddAnd | AddOr | AddNand | AddButton | AddInput | AddOutput | AddEdge | AddCustom _ -> "crosshair"
+            | AddAnd | AddOr | AddNand | AddInput | AddOutput | AddEdge | AddCustom _ -> "crosshair"
             | Select ->
                 match state.Drag with
                 | SelectBox _ -> "crosshair"
