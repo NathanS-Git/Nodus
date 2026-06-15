@@ -3,14 +3,7 @@
 A node-based sandbox for digital logic.
 
 
-The project contains an interactive graph that was inspired by the [CS Academy Graph Editor](https://csacademy.com/app/graph_editor/) but more featureful meant for playing with logic gates. It is implemented in **F#** and compiled to JavaScript with [Fable](https://fable.io/) so it runs in the browser.
-
-### Tech Stack
-
-- **F#** for application logic, state management, and rendering.
-- **Fable 4** to compile F# to JavaScript.
-- **Webpack 5** for bundling and the dev server.
-- **HTML5 Canvas** for high-performance rendering.
+The project contains an interactive graph that was inspired by the [CS Academy Graph Editor](https://csacademy.com/app/graph_editor/).
 
 ## Getting Started
 
@@ -67,4 +60,5 @@ Then open [http://localhost:8080](http://localhost:8080) in your browser. The pa
 - Import/export graph definitions (e.g., adjacency list / JSON).
 - Spatial indexing (quadtree/grid) for hit-testing when graphs scale to thousands of nodes.
 - Wires/routing for cleaner circuit visuals.
-- Persistant storage, to allow for automatically saving your builds.
+- Persistent storage, to allow for automatically saving your builds.
+- Get rid of the ugly buttons at the top - move to keyboard controls
