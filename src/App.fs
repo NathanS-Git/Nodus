@@ -129,7 +129,7 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
     toolbar.innerHTML <- ""
 
     let title = document.createElement ("strong")
-    title.innerText <- "Graph Editor"
+    title.innerText <- "Nodus"
     setStyles title "margin-right:16px;"
     toolbar.appendChild title |> ignore
 
