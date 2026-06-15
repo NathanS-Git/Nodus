@@ -190,6 +190,28 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
 
     let clearBtn = createButton "Clear" false (fun () -> state <- clearGraph state; refresh ())
     let deleteBtn = createButton "Delete Selected" false (fun () -> state <- deleteSelected state; refresh ())
+    let renameBtn = createButton "Rename Selected" false (fun () ->
+        if state.SelectedNodes.Count > 0 then
+            let firstLabel =
+                state.SelectedNodes
+                |> Set.toSeq
+                |> Seq.choose (fun id ->
+                    match Map.tryFind id state.Nodes with
+                    | Some n -> Some n.Label
+                    | None -> None)
+                |> Seq.tryHead
+                |> Option.defaultValue ""
+            match window.prompt ("Rename selected nodes:", firstLabel) with
+            | null -> ()
+            | newLabel ->
+                let nodes =
+                    state.SelectedNodes
+                    |> Set.fold (fun (m: Map<NodeId, Node>) id ->
+                        match Map.tryFind id m with
+                        | Some n -> Map.add id { n with Label = newLabel } m
+                        | None -> m) state.Nodes
+                state <- { state with Nodes = nodes }
+                refresh ())
     let fixedBtn = createButton "Toggle Fixed" false (fun () ->
         state <- state.SelectedNodes |> Set.fold (fun s id -> toggleFixed id s) state
         refresh ())
@@ -227,6 +249,7 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
                 refresh ())
     toolbar.appendChild clearBtn |> ignore
     toolbar.appendChild deleteBtn |> ignore
+    toolbar.appendChild renameBtn |> ignore
     toolbar.appendChild fixedBtn |> ignore
     toolbar.appendChild composeBtn |> ignore
 

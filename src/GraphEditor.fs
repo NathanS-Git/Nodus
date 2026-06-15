@@ -584,6 +584,28 @@ let customOutputPos (n: Node) (port: PortIndex) =
 
 let bubbleRadius = 8.0
 let bubbleDistance = 18.0
+let bubbleCharWidth = 5.5
+let bubblePadding = 8.0
+
+/// Half-width of a pill-shaped bubble for a given label. The height is always
+/// 2 * bubbleRadius.
+let pillHalfWidth (label: string) =
+    max bubbleRadius ((float label.Length * bubbleCharWidth + bubblePadding) / 2.0)
+
+/// Draw a pill-shaped bubble centered at (cx, cy).
+let drawPill (ctx: CanvasRenderingContext2D) (cx: float) (cy: float) (halfWidth: float) (radius: float) =
+    let r = radius
+    let x1 = cx - halfWidth + r
+    let x2 = cx + halfWidth - r
+    let y1 = cy - r
+    let y2 = cy + r
+    ctx.beginPath ()
+    ctx.moveTo (x1, y1)
+    ctx.lineTo (x2, y1)
+    ctx.arc (x2, cy, r, -Math.PI / 2.0, Math.PI / 2.0)
+    ctx.lineTo (x1, y2)
+    ctx.arc (x1, cy, r, Math.PI / 2.0, Math.PI * 1.5)
+    ctx.closePath ()
 
 /// Available output ports for a node (only custom gates have unique outputs).
 let availableOutputPorts (state: GraphState) (nodeId: NodeId) =
@@ -633,12 +655,12 @@ let inputBubblePositions (n: Node) (ports: PortIndex list) =
         let r = n.Radius + bubbleDistance
         port, (n.X + Math.Cos angle * r, n.Y + Math.Sin angle * r))
 
-let hitTestBubble (x: float) (y: float) (positions: (PortIndex * (float * float)) list) =
-    positions
-    |> List.tryPick (fun (port, (bx, by)) ->
-        let dx = x - bx
-        let dy = y - by
-        if dx * dx + dy * dy <= bubbleRadius * bubbleRadius then Some port else None)
+let hitTestBubble (x: float) (y: float) (bubbles: (PortIndex * (float * float) * string) list) =
+    bubbles
+    |> List.tryPick (fun (port, (bx, by), label) ->
+        let hw = pillHalfWidth label
+        let hh = bubbleRadius
+        if x >= bx - hw && x <= bx + hw && y >= by - hh && y <= by + hh then Some port else None)
 
 /// Find a custom-gate input bubble under the cursor. Excludes the source node of
 /// an in-progress wire so a gate's own bubbles are not treated as its target.
@@ -649,11 +671,22 @@ let findInputBubbleHit (x: float) (y: float) (excludeSourceId: NodeId) (state: G
         if n.Id = excludeSourceId then None
         else
             match n.GateType with
-            | Custom _ ->
+            | Custom def ->
                 let ports = availableInputPorts state n.Id
                 if List.length ports > 1 then
                     let positions = inputBubblePositions n ports
-                    hitTestBubble x y positions |> Option.map (fun port -> n.Id, port)
+                    let bubbles =
+                        positions
+                        |> List.map (fun (port, (bx, by)) ->
+                            let label =
+                                if port < def.Inputs.Length then
+                                    let (innerId, _) = def.Inputs.[port]
+                                    match Map.tryFind innerId def.InternalNodes with
+                                    | Some inner when inner.Label <> "" -> inner.Label
+                                    | _ -> string port
+                                else string port
+                            port, (bx, by), label)
+                    hitTestBubble x y bubbles |> Option.map (fun port -> n.Id, port)
                 else None
             | _ -> None)
     |> Seq.tryHead
@@ -803,16 +836,27 @@ let drawBubbles (ctx: CanvasRenderingContext2D) (state: GraphState) =
         // Source output bubbles (only for custom gates with unique outputs)
         match Map.tryFind sourceId state.Nodes with
         | Some source when isCustom source.GateType ->
+            let def =
+                match source.GateType with
+                | Custom d -> d
+                | _ -> failwith "expected custom gate"
             let ports = availableOutputPorts state sourceId
             if List.length ports > 1 then
                 let positions = outputBubblePositions source ports
                 positions
                 |> List.iter (fun (port, (bx, by)) ->
                     ctx.save ()
-                    ctx.beginPath ()
-                    ctx.arc (bx, by, bubbleRadius, 0.0, Math.PI * 2.0)
-                    ctx.fillStyle <-
-                        color (if port = sourcePort then "#f97316" else "rgba(249, 115, 22, 0.3)")
+                    let label =
+                        if port < def.Outputs.Length then
+                            let (innerId, _) = def.Outputs.[port]
+                            match Map.tryFind innerId def.InternalNodes with
+                            | Some inner when inner.Label <> "" -> inner.Label
+                            | _ -> string port
+                        else string port
+                    let hw = pillHalfWidth label
+                    let isSelected = port = sourcePort
+                    ctx.fillStyle <- color (if isSelected then "#f97316" else "rgba(249, 115, 22, 0.3)")
+                    drawPill ctx bx by hw bubbleRadius
                     ctx.fill ()
                     ctx.strokeStyle <- color "#f97316"
                     ctx.lineWidth <- 1.5
@@ -821,7 +865,7 @@ let drawBubbles (ctx: CanvasRenderingContext2D) (state: GraphState) =
                     ctx.font <- "9px sans-serif"
                     ctx.textAlign <- "center"
                     ctx.textBaseline <- "middle"
-                    ctx.fillText (string port, bx, by)
+                    ctx.fillText (label, bx, by)
                     ctx.restore ())
         | _ -> ()
 
@@ -830,16 +874,27 @@ let drawBubbles (ctx: CanvasRenderingContext2D) (state: GraphState) =
         | Some tid ->
             match Map.tryFind tid state.Nodes with
             | Some target when isCustom target.GateType ->
+                let def =
+                    match target.GateType with
+                    | Custom d -> d
+                    | _ -> failwith "expected custom gate"
                 let ports = availableInputPorts state tid
                 if List.length ports > 1 then
                     let positions = inputBubblePositions target ports
                     positions
                     |> List.iter (fun (port, (bx, by)) ->
                         ctx.save ()
-                        ctx.beginPath ()
-                        ctx.arc (bx, by, bubbleRadius, 0.0, Math.PI * 2.0)
-                        ctx.fillStyle <-
-                            color (if Some port = targetPort then "#3b82f6" else "rgba(59, 130, 246, 0.3)")
+                        let label =
+                            if port < def.Inputs.Length then
+                                let (innerId, _) = def.Inputs.[port]
+                                match Map.tryFind innerId def.InternalNodes with
+                                | Some inner when inner.Label <> "" -> inner.Label
+                                | _ -> string port
+                            else string port
+                        let hw = pillHalfWidth label
+                        let isSelected = Some port = targetPort
+                        ctx.fillStyle <- color (if isSelected then "#3b82f6" else "rgba(59, 130, 246, 0.3)")
+                        drawPill ctx bx by hw bubbleRadius
                         ctx.fill ()
                         ctx.strokeStyle <- color "#3b82f6"
                         ctx.lineWidth <- 1.5
@@ -848,7 +903,7 @@ let drawBubbles (ctx: CanvasRenderingContext2D) (state: GraphState) =
                         ctx.font <- "9px sans-serif"
                         ctx.textAlign <- "center"
                         ctx.textBaseline <- "middle"
-                        ctx.fillText (string port, bx, by)
+                        ctx.fillText (label, bx, by)
                         ctx.restore ())
             | _ -> ()
         | None -> ()
@@ -921,10 +976,25 @@ let handleMouseMove (x: float) (y: float) (state: GraphState) =
         let newSourcePort =
             match Map.tryFind sourceId state.Nodes with
             | Some source when isCustom source.GateType ->
+                let def =
+                    match source.GateType with
+                    | Custom d -> d
+                    | _ -> failwith "expected custom gate"
                 let ports = availableOutputPorts state sourceId
                 if List.length ports > 1 then
                     let positions = outputBubblePositions source ports
-                    hitTestBubble x y positions |> Option.defaultValue sourcePort
+                    let bubbles =
+                        positions
+                        |> List.map (fun (port, (bx, by)) ->
+                            let label =
+                                if port < def.Outputs.Length then
+                                    let (innerId, _) = def.Outputs.[port]
+                                    match Map.tryFind innerId def.InternalNodes with
+                                    | Some inner when inner.Label <> "" -> inner.Label
+                                    | _ -> string port
+                                else string port
+                            port, (bx, by), label)
+                    hitTestBubble x y bubbles |> Option.defaultValue sourcePort
                 elif List.length ports = 1 then
                     List.head ports
                 else
@@ -942,10 +1012,25 @@ let handleMouseMove (x: float) (y: float) (state: GraphState) =
                 | Some tid when tid <> sourceId ->
                     match Map.tryFind tid state.Nodes with
                     | Some target when isCustom target.GateType ->
+                        let def =
+                            match target.GateType with
+                            | Custom d -> d
+                            | _ -> failwith "expected custom gate"
                         let ports = availableInputPorts state tid
                         if List.length ports > 1 then
                             let positions = inputBubblePositions target ports
-                            let tp = hitTestBubble x y positions
+                            let bubbles =
+                                positions
+                                |> List.map (fun (port, (bx, by)) ->
+                                    let label =
+                                        if port < def.Inputs.Length then
+                                            let (innerId, _) = def.Inputs.[port]
+                                            match Map.tryFind innerId def.InternalNodes with
+                                            | Some inner when inner.Label <> "" -> inner.Label
+                                            | _ -> string port
+                                        else string port
+                                    port, (bx, by), label)
+                            let tp = hitTestBubble x y bubbles
                             Some tid, tp
                         elif List.length ports = 1 then
                             Some tid, Some (List.head ports)
