@@ -215,6 +215,9 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
     let fixedBtn = createButton "Toggle Fixed" false (fun () ->
         state <- state.SelectedNodes |> Set.fold (fun s id -> toggleFixed id s) state
         refresh ())
+    let rememberShapeBtn = createButton "Remember Shape" false (fun () ->
+        state <- rememberShape state
+        refresh ())
     let composeBtn = createButton "Compose" false (fun () ->
         if state.SelectedNodes.Count > 0 then
             let hasInput =
@@ -251,6 +254,7 @@ and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
     toolbar.appendChild deleteBtn |> ignore
     toolbar.appendChild renameBtn |> ignore
     toolbar.appendChild fixedBtn |> ignore
+    toolbar.appendChild rememberShapeBtn |> ignore
     toolbar.appendChild composeBtn |> ignore
 
     let spacer2 = document.createElement ("span")

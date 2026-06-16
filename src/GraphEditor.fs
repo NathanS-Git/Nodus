@@ -88,6 +88,8 @@ let emptyState canvasWidth canvasHeight = {
     MouseX = 0.0
     MouseY = 0.0
     CustomStates = Map.empty
+    ShapeConstraints = Set.empty
+    ShapeRestDistances = Map.empty
 }
 
 let distPointToSegment px py x1 y1 x2 y2 =
@@ -270,7 +272,9 @@ and simulateWithForced (forcedOutputs: Map<NodeId, bool array>) (state: GraphSta
             { state with
                 Nodes = startNodes
                 Edges = def.InternalEdges
-                CustomStates = startCustomStates }
+                CustomStates = startCustomStates
+                ShapeConstraints = Set.empty
+                ShapeRestDistances = Map.empty }
             |> simulateWithForced forced
 
         customStates.Value <- Map.add n.Id internalState customStates.Value
@@ -378,6 +382,32 @@ let toggleFixed nodeId (state: GraphState) =
         { state with Nodes = nodes }
     | None -> state
 
+let rememberShape (state: GraphState) =
+    if Set.count state.SelectedNodes < 2 then state
+    else
+        let selected = Set.toList state.SelectedNodes
+        let pairs =
+            [ for i in 0 .. selected.Length - 1 do
+                for j in i + 1 .. selected.Length - 1 do
+                    let a = selected.[i]
+                    let b = selected.[j]
+                    if a < b then a, b else b, a ]
+        let restDistances =
+            pairs
+            |> List.choose (fun (a, b) ->
+                match Map.tryFind a state.Nodes, Map.tryFind b state.Nodes with
+                | Some na, Some nb ->
+                    let dx = nb.X - na.X
+                    let dy = nb.Y - na.Y
+                    Some ((a, b), sqrt (dx * dx + dy * dy))
+                | _ -> None)
+            |> Map.ofList
+        { state with
+            ShapeConstraints = Set.union state.ShapeConstraints (Set.ofList pairs)
+            ShapeRestDistances =
+                restDistances
+                |> Map.fold (fun m k v -> Map.add k v m) state.ShapeRestDistances }
+
 let deleteSelected (state: GraphState) =
     let edgesToRemove =
         state.Edges
@@ -388,11 +418,19 @@ let deleteSelected (state: GraphState) =
         |> Map.toList
         |> List.map fst
     let nodesToRemove = state.SelectedNodes
+    let newConstraints =
+        state.ShapeConstraints
+        |> Set.filter (fun (a, b) -> not (Set.contains a nodesToRemove) && not (Set.contains b nodesToRemove))
+    let newRestDistances =
+        state.ShapeRestDistances
+        |> Map.filter (fun (a, b) _ -> not (Set.contains a nodesToRemove) && not (Set.contains b nodesToRemove))
     let newState =
         { state with
             Nodes = nodesToRemove |> Set.fold (fun m id -> Map.remove id m) state.Nodes
             Edges = edgesToRemove |> List.fold (fun m eid -> Map.remove eid m) state.Edges
             CustomStates = nodesToRemove |> Set.fold (fun m id -> Map.remove id m) state.CustomStates
+            ShapeConstraints = newConstraints
+            ShapeRestDistances = newRestDistances
             SelectedNodes = Set.empty
             SelectedEdges = Set.empty
             Hovered = None }
@@ -481,6 +519,12 @@ let composeSelection name (state: GraphState) =
                         Map.add nextId newEdge edges, nextId + 1
                     | None -> edges, nextId) (edges, state.NextEdgeId)
 
+            let newConstraints =
+                state.ShapeConstraints
+                |> Set.filter (fun (a, b) -> not (Set.contains a state.SelectedNodes) && not (Set.contains b state.SelectedNodes))
+            let newRestDistances =
+                state.ShapeRestDistances
+                |> Map.filter (fun (a, b) _ -> not (Set.contains a state.SelectedNodes) && not (Set.contains b state.SelectedNodes))
             let newState = {
                 state with
                     Nodes = nodes
@@ -489,6 +533,8 @@ let composeSelection name (state: GraphState) =
                     NextEdgeId = nextEdgeId
                     SelectedNodes = Set.singleton newId
                     SelectedEdges = Set.empty
+                    ShapeConstraints = newConstraints
+                    ShapeRestDistances = newRestDistances
             }
             simulate newState
 
@@ -497,6 +543,8 @@ let clearGraph (state: GraphState) =
         Nodes = Map.empty
         Edges = Map.empty
         CustomStates = Map.empty
+        ShapeConstraints = Set.empty
+        ShapeRestDistances = Map.empty
         NextNodeId = 0
         NextEdgeId = 0
         SelectedNodes = Set.empty

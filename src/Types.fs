@@ -80,4 +80,8 @@ type GraphState = {
     /// This lets cyclic internal circuits (latches/registers) retain their state
     /// across evaluations instead of restarting from the composed snapshot.
     CustomStates: Map<NodeId, GraphState>
+    /// Pairs of nodes whose relative distance should be preserved by physics.
+    ShapeConstraints: Set<NodeId * NodeId>
+    /// Rest distance for each shape-constrained pair.
+    ShapeRestDistances: Map<NodeId * NodeId, float>
 }

@@ -73,6 +73,26 @@ let applyForces (state: GraphState) (pinnedNodeIds: Set<NodeId>) =
                 |> Map.add b.Id (fst (Map.find b.Id forces) - fx, snd (Map.find b.Id forces) - fy)
             | _ -> forces) forces
 
+    // Rigid shape constraints: remember distances between selected node pairs.
+    let shapeStrength = 0.4
+    let forces =
+        state.ShapeConstraints
+        |> Set.fold (fun forces (id1, id2) ->
+            match Map.tryFind id1 state.Nodes, Map.tryFind id2 state.Nodes with
+            | Some a, Some b ->
+                match Map.tryFind (id1, id2) state.ShapeRestDistances with
+                | Some restLength ->
+                    let (dist, dirX, dirY) = distanceAndDir a.X a.Y b.X b.Y
+                    let displacement = dist - restLength
+                    let force = shapeStrength * displacement
+                    let fx = dirX * force
+                    let fy = dirY * force
+                    forces
+                    |> Map.add id1 (fst (Map.find id1 forces) + fx, snd (Map.find id1 forces) + fy)
+                    |> Map.add id2 (fst (Map.find id2 forces) - fx, snd (Map.find id2 forces) - fy)
+                | None -> forces
+            | _ -> forces) forces
+
     // Gentle pull toward the canvas center so the graph does not drift away.
     let forces =
         state.Nodes
