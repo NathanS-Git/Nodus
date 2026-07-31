@@ -818,11 +818,17 @@ let drawNode (ctx: CanvasRenderingContext2D) (state: GraphState) (n: Node) =
     ctx.beginPath ()
     ctx.arc (n.X, n.Y, n.Radius, 0.0, Math.PI * 2.0)
 
-    let fillColor, strokeColor =
+    let fillColor, strokeColor, labelColor =
         match n.GateType with
-        | Input -> (if outputHigh then "#86efac" else "#e5e7eb"), "#1d4ed8"
-        | Output -> (if outputHigh then "#f97316" else "#e5e7eb"), (if outputHigh then "#c2410c" else "#9ca3af")
-        | _ -> "#ffffff", "#374151"
+        | Input ->
+            (if outputHigh then "#2563eb" else "#e6edf5"),
+            (if outputHigh then "#1d4ed8" else "#94a3b8"),
+            (if outputHigh then "#ffffff" else "#334155")
+        | Output ->
+            (if outputHigh then "#ea580c" else "#f5ebe5"),
+            (if outputHigh then "#c2410c" else "#c8a895"),
+            (if outputHigh then "#ffffff" else "#6b4f3f")
+        | _ -> "#ffffff", "#374151", "#111827"
     ctx.fillStyle <- color fillColor
     ctx.fill ()
     ctx.strokeStyle <-
@@ -852,7 +858,7 @@ let drawNode (ctx: CanvasRenderingContext2D) (state: GraphState) (n: Node) =
 
 
     // label
-    ctx.fillStyle <- color (if n.GateType = Input || n.GateType = Output then "#ffffff" else "#111827")
+    ctx.fillStyle <- color labelColor
     ctx.font <- "bold 12px sans-serif"
     ctx.textAlign <- "center"
     ctx.textBaseline <- "middle"
