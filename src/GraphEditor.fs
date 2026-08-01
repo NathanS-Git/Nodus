@@ -980,15 +980,64 @@ let drawSelectionBox (ctx: CanvasRenderingContext2D) (state: GraphState) =
         ctx.restore ()
     | _ -> ()
 
-let render (ctx: CanvasRenderingContext2D) (state: GraphState) =
-    ctx.clearRect (0.0, 0.0, state.CanvasWidth, state.CanvasHeight)
-    drawGrid ctx state.CanvasWidth state.CanvasHeight
-
+let private drawGraph (ctx: CanvasRenderingContext2D) (state: GraphState) =
     state.Edges |> Map.iter (fun _ e -> drawEdge ctx state e)
     drawEdgePreview ctx state
     state.Nodes |> Map.iter (fun _ n -> drawNode ctx state n)
     drawBubbles ctx state
     drawSelectionBox ctx state
+
+let private renderLayer
+    (ctx: CanvasRenderingContext2D)
+    (state: GraphState)
+    (opacity: float)
+    (scale: float)
+    (focusX: float)
+    (focusY: float) =
+    ctx.save ()
+    ctx.globalAlpha <- opacity
+    ctx.translate (focusX, focusY)
+    ctx.scale (scale, scale)
+    ctx.translate (-focusX, -focusY)
+    drawGraph ctx state
+    ctx.restore ()
+
+let render (ctx: CanvasRenderingContext2D) (state: GraphState) =
+    ctx.clearRect (0.0, 0.0, state.CanvasWidth, state.CanvasHeight)
+    drawGrid ctx state.CanvasWidth state.CanvasHeight
+    renderLayer ctx state 1.0 1.0 0.0 0.0
+
+/// Render two graph snapshots during a composed-gate navigation transition.
+/// The grid stays stable while the graph layers crossfade and zoom around the
+/// composed cell that was opened or closed.
+let renderTransition
+    (ctx: CanvasRenderingContext2D)
+    (fromState: GraphState)
+    (toState: GraphState)
+    (fromOpacity: float)
+    (fromScale: float)
+    (toOpacity: float)
+    (toScale: float)
+    (focusX: float)
+    (focusY: float)
+    (focusRadius: float)
+    (progress: float) =
+    ctx.clearRect (0.0, 0.0, toState.CanvasWidth, toState.CanvasHeight)
+    drawGrid ctx toState.CanvasWidth toState.CanvasHeight
+    renderLayer ctx fromState fromOpacity fromScale focusX focusY
+    renderLayer ctx toState toOpacity toScale focusX focusY
+
+    // A brief expanding ring makes the boundary of the composed cell feel
+    // like the handoff point instead of an abrupt full-canvas swap.
+    ctx.save ()
+    let ringRadius = focusRadius + 8.0 + progress * 16.0
+    let ringOpacity = 0.32 * (1.0 - progress)
+    ctx.strokeStyle <- color (sprintf "rgba(37, 99, 235, %f)" ringOpacity)
+    ctx.lineWidth <- 2.0
+    ctx.beginPath ()
+    ctx.arc (focusX, focusY, ringRadius, 0.0, Math.PI * 2.0)
+    ctx.stroke ()
+    ctx.restore ()
 
 let moveSelectedNodes (dx: float) (dy: float) (state: GraphState) =
     let nodes =

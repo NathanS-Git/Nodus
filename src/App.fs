@@ -1,5 +1,6 @@
 module App
 
+open System
 open Browser.Dom
 open Browser.Types
 open Types
@@ -9,6 +10,39 @@ let mutable state = emptyState 800.0 600.0
 let customGates = ResizeArray<CustomGateDef>()
 /// Stack of (parent state, custom gate node id, custom gate definition) for nested editing.
 let navigationStack = ResizeArray<GraphState * NodeId * CustomGateDef>()
+
+type ViewTransition = {
+    FromState: GraphState
+    ToState: GraphState
+    FocusX: float
+    FocusY: float
+    FocusRadius: float
+    Entering: bool
+    StartedAt: float
+}
+
+let mutable viewTransition: ViewTransition option = None
+let mutable animationTime = 0.0
+let transitionDuration = 280.0
+
+let beginViewTransition fromState toState focusX focusY focusRadius entering =
+    viewTransition <-
+        Some {
+            FromState = fromState
+            ToState = toState
+            FocusX = focusX
+            FocusY = focusY
+            FocusRadius = focusRadius
+            Entering = entering
+            StartedAt = animationTime
+        }
+
+let easeInOut t =
+    let t = max 0.0 (min 1.0 t)
+    if t < 0.5 then
+        4.0 * t * t * t
+    else
+        1.0 - Math.Pow (-2.0 * t + 2.0, 3.0) / 2.0
 
 /// True if the given definition is the one currently being edited or one of its ancestors.
 /// Placing such a gate inside itself (or a descendant of itself) would create a recursive
@@ -42,14 +76,15 @@ let rec enterCustomGate (toolbar: HTMLElement) (status: HTMLSpanElement) (nodeId
     | Some n when isCustom n.GateType ->
         match n.GateType with
         | Custom def ->
-            navigationStack.Add(state, nodeId, def)
+            let parentState = state
+            navigationStack.Add(parentState, nodeId, def)
             let maxNodeId =
                 if Map.isEmpty def.InternalNodes then 0
                 else def.InternalNodes |> Map.toSeq |> Seq.map fst |> Seq.max
             let maxEdgeId =
                 if Map.isEmpty def.InternalEdges then 0
                 else def.InternalEdges |> Map.toSeq |> Seq.map fst |> Seq.max
-            state <-
+            let nextState =
                 { emptyState state.CanvasWidth state.CanvasHeight with
                     Nodes = def.InternalNodes
                     Edges = def.InternalEdges
@@ -57,12 +92,15 @@ let rec enterCustomGate (toolbar: HTMLElement) (status: HTMLSpanElement) (nodeId
                     NextEdgeId = maxEdgeId + 1
                     CustomStates = Map.empty }
                 |> simulate
+            beginViewTransition parentState nextState n.X n.Y n.Radius true
+            state <- nextState
             updateToolbar toolbar status
         | _ -> ()
     | _ -> ()
 
 and exitCustomGate (toolbar: HTMLElement) (status: HTMLSpanElement) =
     if navigationStack.Count > 0 then
+        let innerState = state
         let parentState, nodeId, def = navigationStack.[navigationStack.Count - 1]
         navigationStack.RemoveAt(navigationStack.Count - 1)
         let inputNodeIds =
@@ -116,13 +154,19 @@ and exitCustomGate (toolbar: HTMLElement) (status: HTMLSpanElement) =
                 if e.Target = nodeId then Set.contains e.TargetPort validInputPorts
                 elif e.Source = nodeId then Set.contains e.SourcePort validOutputPorts
                 else true)
-        state <-
+        let nextState =
             { parentState with
                 CanvasWidth = state.CanvasWidth
                 CanvasHeight = state.CanvasHeight
                 Edges = edges
                 CustomStates = Map.empty }
             |> simulate
+        let focusX, focusY, focusRadius =
+            match Map.tryFind nodeId parentState.Nodes with
+            | Some node -> node.X, node.Y, node.Radius
+            | None -> parentState.CanvasWidth / 2.0, parentState.CanvasHeight / 2.0, nodeRadius
+        beginViewTransition innerState nextState focusX focusY focusRadius false
+        state <- nextState
         updateToolbar toolbar status
 
 and updateToolbar (toolbar: HTMLElement) (status: HTMLSpanElement) =
@@ -293,6 +337,34 @@ let getMousePos (canvas: HTMLCanvasElement) (ev: MouseEvent) =
     let rect = canvas.getBoundingClientRect ()
     (ev.clientX - rect.left, ev.clientY - rect.top)
 
+let renderCurrentView (ctx: CanvasRenderingContext2D) =
+    match viewTransition with
+    | None -> render ctx state
+    | Some transition ->
+        let progress = (animationTime - transition.StartedAt) / transitionDuration
+        if progress >= 1.0 then
+            viewTransition <- None
+            render ctx state
+        else
+            let eased = easeInOut progress
+            let fromScale, toScale =
+                if transition.Entering then
+                    1.0 + eased * 0.08, 0.94 + eased * 0.06
+                else
+                    1.0 - eased * 0.06, 1.08 - eased * 0.08
+            renderTransition
+                ctx
+                transition.FromState
+                transition.ToState
+                (1.0 - eased)
+                fromScale
+                eased
+                toScale
+                transition.FocusX
+                transition.FocusY
+                transition.FocusRadius
+                eased
+
 let init () =
     let toolbar = createToolbar ()
     let status = createStatus ()
@@ -309,6 +381,7 @@ let init () =
         canvas.width <- int width
         canvas.height <- int height
         state <- resize width height state
+        viewTransition <- None
 
     canvas.onmousemove <- fun ev ->
         let (x, y) = getMousePos canvas ev
@@ -347,7 +420,15 @@ let init () =
     applyResize ()
     updateToolbar toolbar status
 
-    let rec loop (_: float) =
+    let mutable previousFrameTime: float option = None
+
+    let rec loop (timestamp: float) =
+        let delta =
+            match previousFrameTime with
+            | Some previous -> max 0.0 (min 100.0 (timestamp - previous))
+            | None -> 0.0
+        previousFrameTime <- Some timestamp
+        animationTime <- animationTime + delta
         let cursor =
             match state.Mode with
             | AddAnd | AddOr | AddNand | AddInput | AddOutput | AddEdge | AddCustom _ -> "crosshair"
@@ -360,7 +441,7 @@ let init () =
                     | _ -> "default"
         setStyles canvas (sprintf "display:block;cursor:%s;" cursor)
         state <- physicsStep state
-        render ctx state
+        renderCurrentView ctx
         window.requestAnimationFrame loop |> ignore
 
     window.requestAnimationFrame loop |> ignore
